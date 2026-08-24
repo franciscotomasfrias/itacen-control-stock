@@ -105,7 +105,7 @@ no haya ningún punto, ni de CodeRabbit ni tuyo (Paso 2), que amerite
 discusión. Esto deja constancia de que el segundo revisor efectivamente miró
 el PR, no que simplemente nadie encontró nada. Usá algo así, sin adornos:
 
-```
+```text
 Revisé el PR de forma independiente (comentario de CodeRabbit + diff
 completo). No tengo objeciones propias que agregar. Resuelto.
 ```

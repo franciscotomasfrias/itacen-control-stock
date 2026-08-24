@@ -35,8 +35,23 @@ jobs:
       id-token: write
       actions: read
     steps:
+      # Para eventos issue_comment, actions/checkout sin "ref" trae el
+      # branch por defecto del repo (main), no el branch real del PR --
+      # rompe cualquier intento de Claude de commitear/pushear un fix
+      # directo (Paso 4 del protocolo). Resolvemos el head ref real del PR
+      # primero, para los 3 tipos de evento que dispara este workflow.
+      - name: Resolver branch real del PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
+          HEAD_REF=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefName --jq .headRefName)
+          echo "ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          ref: ${{ steps.pr.outputs.ref }}
           fetch-depth: 1
 
       # No le pasamos SLACK_WEBHOOK_URL a este paso: Claude nunca ve el
