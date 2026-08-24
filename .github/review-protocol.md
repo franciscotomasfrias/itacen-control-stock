@@ -73,18 +73,24 @@ Terminá tu respuesta con una de estas tres cosas, explícitamente:
 
 ## Paso 6: notificá a Slack solo cuando corresponda
 
-Ejecutá `bash .github/scripts/notify-slack.sh "<resumen corto>"` en estos
-casos, y en ningún otro:
+Vos no tenés (ni podés tener) la URL del webhook de Slack — por diseño, para
+que ni vos ni nadie que manipule un PR pueda leerla. En vez de mandar el
+mensaje directamente, escribí el texto que querés mandar en el archivo
+`/tmp/slack-notify.txt` (con el tool Write, no con Bash). Un paso aparte del
+workflow, que sí tiene el secret, lo lee y lo manda después de que termines.
 
-1. **Escalaste algo** en el Paso 5 → mandá de una el resumen de qué se
-   escaló y por qué, con el link al PR.
+Escribí ese archivo en estos casos, y en ningún otro:
+
+1. **Escalaste algo** en el Paso 5 → el texto debe resumir qué se escaló y
+   por qué, con el link al PR.
 2. **Ya no queda ningún punto en "sigue en debate"** en todo el PR (todos los
-   puntos llegaron a Resuelto o Escalado) → mandá un resumen final: qué se
+   puntos llegaron a Resuelto o Escalado) → el texto debe resumir qué se
    resolvió solo, qué quedó escalado (si algo), y que el PR está listo para
    que Francisco le eche un vistazo y decida si mergea.
 
-No mandes Slack si todavía hay puntos en debate activo esperando la próxima
-respuesta de CodeRabbit — eso generaría ruido por cada ida y vuelta normal.
+No escribas ese archivo si todavía hay puntos en debate activo esperando la
+próxima respuesta de CodeRabbit — eso generaría ruido por cada ida y vuelta
+normal.
 
 ## Reglas generales
 

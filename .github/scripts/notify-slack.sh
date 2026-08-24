@@ -14,6 +14,7 @@ MSG="${1:?Uso: notify-slack.sh \"texto del mensaje\"}"
 
 PAYLOAD=$(jq -n --arg text "$MSG" '{text: $text}')
 
-curl -s -X POST -H "Content-type: application/json" \
+curl -s --fail --show-error --connect-timeout 5 --max-time 15 \
+  -X POST -H "Content-type: application/json" \
   --data "$PAYLOAD" \
   "$SLACK_WEBHOOK_URL" > /dev/null

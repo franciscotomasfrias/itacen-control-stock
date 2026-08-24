@@ -13,6 +13,10 @@ on:
   pull_request_review:
     types: [submitted]
 
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   respond:
     if: >
@@ -30,14 +34,16 @@ jobs:
       issues: write
       id-token: write
       actions: read
-    env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 1
 
-      - uses: anthropics/claude-code-action@v1
+      # No le pasamos SLACK_WEBHOOK_URL a este paso: Claude nunca ve el
+      # secret. Si decide notificar, solo escribe un archivo de texto en
+      # /tmp (fuera del repo) -- el paso siguiente, que SI corre con el
+      # secret, es el unico que llega a mandar algo a Slack.
+      - uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_bots: "coderabbitai[bot]"
@@ -48,4 +54,14 @@ jobs:
             #${{ github.event.pull_request.number || github.event.issue.number }}
             del repositorio ${{ github.repository }}.
           claude_args: |
-            --allowedTools "Bash,Edit,Read,Write,Glob,Grep"
+            --allowedTools "Edit,Read,Write,Glob,Grep,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(npm run build:*)"
+
+      - name: Notificar a Slack si corresponde
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -f /tmp/slack-notify.txt ]; then
+            bash .github/scripts/notify-slack.sh "$(cat /tmp/slack-notify.txt)"
+            rm -f /tmp/slack-notify.txt
+          fi
