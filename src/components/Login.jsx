@@ -31,9 +31,11 @@ export default function Login() {
           </div>
         )}
 
-        <label className="block text-xs mb-1" style={{ color: '#8B8F98' }}>Email</label>
+        <label htmlFor="login-email" className="block text-xs mb-1" style={{ color: '#8B8F98' }}>Email</label>
         <input
+          id="login-email"
           type="email"
+          autoComplete="username"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -41,9 +43,11 @@ export default function Login() {
           style={{ background: '#12151A', border: '1px solid #2A2F3A', color: '#E7E5E0' }}
         />
 
-        <label className="block text-xs mb-1" style={{ color: '#8B8F98' }}>Contraseña</label>
+        <label htmlFor="login-password" className="block text-xs mb-1" style={{ color: '#8B8F98' }}>Contraseña</label>
         <input
+          id="login-password"
           type="password"
+          autoComplete="current-password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
