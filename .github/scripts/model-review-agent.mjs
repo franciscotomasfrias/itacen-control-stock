@@ -85,11 +85,24 @@ async function withTempFile(prefix, content, fn) {
 // safeExecuteTool también, como defensa en profundidad).
 
 async function toolReadPrMetadata() {
-  const { stdout } = await execFileP(
-    'gh',
-    ['pr', 'view', PR_NUMBER, '--repo', REPO, '--json', 'title,body,comments,reviews'],
-    { cwd: REPO_ROOT, maxBuffer: 10 * 1024 * 1024 }
-  );
+  let stdout;
+  try {
+    ({ stdout } = await execFileP(
+      'gh',
+      ['pr', 'view', PR_NUMBER, '--repo', REPO, '--json', 'title,body,comments,reviews'],
+      { cwd: REPO_ROOT, maxBuffer: 10 * 1024 * 1024 }
+    ));
+  } catch (err) {
+    if (err?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+      return {
+        ok: false,
+        error:
+          'la respuesta de gh pr view superó el maxBuffer (10 MiB). El contexto no se leyó completo; hay que aumentar límite o cambiar estrategia de lectura.',
+      };
+    }
+    throw err;
+  }
+
   let data;
   try {
     data = JSON.parse(stdout);
@@ -100,11 +113,22 @@ async function toolReadPrMetadata() {
 }
 
 async function toolReadPrDiff() {
-  const { stdout } = await execFileP('gh', ['pr', 'diff', PR_NUMBER, '--repo', REPO], {
-    cwd: REPO_ROOT,
-    maxBuffer: 10 * 1024 * 1024,
-  });
-  return { ok: true, diff: stdout };
+  try {
+    const { stdout } = await execFileP('gh', ['pr', 'diff', PR_NUMBER, '--repo', REPO], {
+      cwd: REPO_ROOT,
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return { ok: true, diff: stdout };
+  } catch (err) {
+    if (err?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+      return {
+        ok: false,
+        error:
+          'el diff del PR superó el maxBuffer (10 MiB). El contexto no se leyó completo; hay que aumentar límite o cambiar estrategia de lectura.',
+      };
+    }
+    throw err;
+  }
 }
 
 async function toolReadFile({ path: userPath } = {}) {
@@ -572,7 +596,7 @@ async function main() {
       messages.push({
         role: 'tool',
         tool_call_id: call.id,
-        content: JSON.stringify(result).slice(0, 25_000),
+        content: JSON.stringify(result),
       });
     }
   }
