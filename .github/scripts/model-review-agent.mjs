@@ -54,8 +54,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ---------- Path safety (solo para read_file/edit_file/write_file) ----------
+// ---------- Path safety ----------
 
+// Usado por read_file (solo lectura -- necesita poder leer cualquier cosa
+// del repo, incluido .github/, para poder razonar sobre el propio sistema).
 function resolveSafePath(userPath) {
   if (typeof userPath !== 'string' || userPath.length === 0) {
     throw new Error('path invalido');
@@ -64,6 +66,28 @@ function resolveSafePath(userPath) {
   const rel = path.relative(REPO_ROOT, resolved);
   if (rel.startsWith('..') || path.isAbsolute(rel)) {
     throw new Error(`path fuera del repo: ${userPath}`);
+  }
+  return resolved;
+}
+
+// Usado por edit_file/write_file (escritura). Además de estar dentro del
+// repo, .github/ queda completamente vedado: son los archivos de
+// gobernanza del propio sistema (el workflow, review-protocol.md, y este
+// mismo script). El modelo puede pushear fixes de bajo riesgo de forma
+// autónoma (Paso 4 del protocolo) sin revisión humana previa -- si pudiera
+// además reescribir sus propias reglas o su propio gate de forks, un PR
+// del mismo repo (no un fork, así que pasa resolve-pr) con una instrucción
+// inyectada en su texto podría intentar debilitar su propia seguridad y
+// pushear ese cambio sin que nadie lo revise. Hallazgo real del segundo
+// revisor en el PR #5 -- este límite es deliberado, no se debe relajar sin
+// que Francisco lo decida explícitamente.
+function resolveWritablePath(userPath) {
+  const resolved = resolveSafePath(userPath);
+  const rel = path.relative(REPO_ROOT, resolved);
+  if (rel === '.github' || rel.startsWith(`.github${path.sep}`)) {
+    throw new Error(
+      `no se puede escribir dentro de .github/ (${userPath}) -- son los archivos de gobernanza del propio sistema, ese cambio lo tiene que aplicar un humano`
+    );
   }
   return resolved;
 }
@@ -154,7 +178,7 @@ async function toolEditFile({ path: userPath, old_string, new_string, replace_al
   if (old_string === new_string) {
     return { ok: false, error: 'old_string y new_string son iguales -- no hay nada que cambiar' };
   }
-  const filePath = resolveSafePath(userPath);
+  const filePath = resolveWritablePath(userPath);
   const s = await stat(filePath).catch(() => null);
   if (!s || !s.isFile()) return { ok: false, error: `no existe: ${userPath}` };
   const content = await readFile(filePath, 'utf8');
@@ -173,7 +197,7 @@ async function toolEditFile({ path: userPath, old_string, new_string, replace_al
 
 async function toolWriteFile({ path: userPath, content } = {}) {
   if (typeof content !== 'string') return { ok: false, error: 'content es obligatorio' };
-  const filePath = resolveSafePath(userPath);
+  const filePath = resolveWritablePath(userPath);
   await writeFile(filePath, content, 'utf8');
   return { ok: true, path: userPath };
 }
@@ -341,7 +365,7 @@ const TOOL_SCHEMAS = [
     function: {
       name: 'edit_file',
       description:
-        'Reemplaza old_string por new_string en un archivo existente (falla si old_string no aparece exactamente una vez, salvo replace_all:true). Preferí esta herramienta a write_file para archivos existentes.',
+        'Reemplaza old_string por new_string en un archivo existente (falla si old_string no aparece exactamente una vez, salvo replace_all:true). Preferí esta herramienta a write_file para archivos existentes. No podés editar nada dentro de .github/ (son los archivos de gobernanza de este mismo sistema) -- si encontrás algo real para arreglar ahí, es un punto para ESCALAR, no para aplicar vos.',
       parameters: {
         type: 'object',
         properties: {
@@ -359,7 +383,8 @@ const TOOL_SCHEMAS = [
     type: 'function',
     function: {
       name: 'write_file',
-      description: 'Crea o sobreescribe un archivo completo con el contenido dado.',
+      description:
+        'Crea o sobreescribe un archivo completo con el contenido dado. No podés escribir nada dentro de .github/ (son los archivos de gobernanza de este mismo sistema) -- si encontrás algo real para arreglar ahí, es un punto para ESCALAR, no para aplicar vos.',
       parameters: {
         type: 'object',
         properties: { path: { type: 'string' }, content: { type: 'string' } },

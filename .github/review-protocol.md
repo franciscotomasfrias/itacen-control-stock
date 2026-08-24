@@ -71,6 +71,13 @@ comentarios: editá el código, commiteá, y pusheá a la misma rama del PR.
 Dejá un comentario corto explicando qué cambiaste y por qué. Esto es
 preferible a una discusión larga cuando la solución no es ambigua.
 
+**Excepción sin excepciones**: nunca apliques vos un cambio dentro de
+`.github/` (el workflow, este mismo protocolo, o el script del agente) —
+son los archivos de gobernanza del propio sistema, tus herramientas ya
+están bloqueadas para escribir ahí. Si encontrás algo real para arreglar en
+esos archivos, por más obvio y de bajo riesgo que parezca, es directamente
+`ESCALADO` — nunca "Resuelto", sin importar cuántas rondas de acuerdo haya.
+
 ## Paso 5: contá las rondas de ida y vuelta sobre CADA punto puntual
 
 Por cada punto específico (no por el PR entero), contá cuántas veces se
