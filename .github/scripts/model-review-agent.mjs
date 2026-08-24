@@ -297,11 +297,15 @@ async function toolGitCommitAndPush({ message } = {}) {
   }
 
   // Runner de GitHub Actions no garantiza identidad git preconfigurada.
-  // La dejamos fija para que los commits automáticos no fallen por author vacío.
-  await execFileP('git', ['config', 'user.name', 'github-actions[bot]'], { cwd: REPO_ROOT });
-  await execFileP('git', ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], {
-    cwd: REPO_ROOT,
-  });
+  // La dejamos fija para que los commits automáticos no fallen por author
+  // vacío. Usa la identidad de la GitHub App "AI Second Reviewer" (no el
+  // github-actions[bot] genérico) -- formato estándar app-id+slug[bot].
+  await execFileP('git', ['config', 'user.name', 'ai-second-reviewer[bot]'], { cwd: REPO_ROOT });
+  await execFileP(
+    'git',
+    ['config', 'user.email', '4707354+ai-second-reviewer[bot]@users.noreply.github.com'],
+    { cwd: REPO_ROOT },
+  );
 
   await execFileP('git', ['add', '-A'], { cwd: REPO_ROOT });
 
