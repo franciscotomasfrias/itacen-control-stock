@@ -96,14 +96,6 @@ async function toolReadPrMetadata() {
   } catch {
     return { ok: false, error: 'no se pudo parsear la respuesta de gh pr view' };
   }
-  const MAX_COMMENTS = 40;
-  if (Array.isArray(data.comments) && data.comments.length > MAX_COMMENTS) {
-    const omitted = data.comments.length - MAX_COMMENTS;
-    data.comments = [
-      { note: `${omitted} comentarios más antiguos omitidos por espacio` },
-      ...data.comments.slice(-MAX_COMMENTS),
-    ];
-  }
   return { ok: true, data };
 }
 
@@ -112,11 +104,7 @@ async function toolReadPrDiff() {
     cwd: REPO_ROOT,
     maxBuffer: 10 * 1024 * 1024,
   });
-  const CAP = 60_000;
-  if (stdout.length > CAP) {
-    return { ok: true, diff: stdout.slice(0, CAP), truncated: true, totalLength: stdout.length };
-  }
-  return { ok: true, diff: stdout, truncated: false };
+  return { ok: true, diff: stdout };
 }
 
 async function toolReadFile({ path: userPath } = {}) {
@@ -211,6 +199,14 @@ async function toolGitCommitAndPush({ message } = {}) {
   if (typeof message !== 'string' || message.trim() === '') {
     return { ok: false, error: 'message es obligatorio' };
   }
+
+  // Runner de GitHub Actions no garantiza identidad git preconfigurada.
+  // La dejamos fija para que los commits automáticos no fallen por author vacío.
+  await execFileP('git', ['config', 'user.name', 'github-actions[bot]'], { cwd: REPO_ROOT });
+  await execFileP('git', ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], {
+    cwd: REPO_ROOT,
+  });
+
   await execFileP('git', ['add', '-A'], { cwd: REPO_ROOT });
 
   // git diff --staged --quiet: exit 0 = sin diferencias, exit 1 = hay
@@ -554,6 +550,14 @@ async function main() {
     messages.push(choice.message);
 
     const toolCalls = choice.message?.tool_calls;
+    if (choice.finish_reason === 'length') {
+      console.error('[fatal] OpenRouter devolvió finish_reason="length" (respuesta truncada)');
+      await bestEffortSlackCrashNotice(
+        `⚠️ El segundo revisor automático (PR #${PR_NUMBER}) recibió una respuesta truncada del modelo (finish_reason=length). Revisar el log de Actions.`
+      );
+      return 1;
+    }
+
     if (choice.finish_reason !== 'tool_calls' || !toolCalls?.length) {
       console.log(
         `[usage] TOTAL iterations=${iteration} prompt=${totals.prompt} completion=${totals.completion} total=${totals.prompt + totals.completion}`
