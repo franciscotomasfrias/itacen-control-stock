@@ -627,12 +627,14 @@ async function main() {
 
   const protocolText = await readFile(path.join(REPO_ROOT, PROTOCOL_PATH), 'utf8');
 
+  const userMessage =
+    process.env.MANUAL_RESYNC === 'true'
+      ? `Te dispararon manualmente (no un comentario nuevo de CodeRabbit) para releer el estado actual del PR #${PR_NUMBER} del repositorio ${REPO} y notificar si corresponde -- por ejemplo, después de que se aplicó un fix humano fuera de tu loop (algo que vos u otra ronda había marcado ESCALADO). Releé el hilo completo con criterio propio y seguí el protocolo desde ahí; no asumas que hay un comentario nuevo puntual para reaccionar.`
+      : `Se disparó esta ejecución por un comentario nuevo de CodeRabbit en el PR #${PR_NUMBER} del repositorio ${REPO}. Seguí el protocolo.`;
+
   const messages = [
     { role: 'system', content: buildSystemPrompt(protocolText) },
-    {
-      role: 'user',
-      content: `Se disparó esta ejecución por un comentario nuevo de CodeRabbit en el PR #${PR_NUMBER} del repositorio ${REPO}. Seguí el protocolo.`,
-    },
+    { role: 'user', content: userMessage },
   ];
 
   const totals = { prompt: 0, completion: 0 };
