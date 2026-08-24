@@ -44,6 +44,14 @@ jobs:
       # /tmp (fuera del repo) -- el paso siguiente, que SI corre con el
       # secret, es el unico que llega a mandar algo a Slack.
       - uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1
+        env:
+          # Necesario para que "gh pr comment" funcione dentro del Bash del
+          # agente. El comment-server interno de la action solo sirve para
+          # EDITAR un comentario propio ya existente, no para postear un
+          # comentario nuevo -- y necesitamos comentarios nuevos para que
+          # CodeRabbit efectivamente reaccione de nuevo (una edicion no
+          # dispara su bot).
+          GH_TOKEN: ${{ github.token }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_bots: "coderabbitai[bot]"
@@ -52,9 +60,11 @@ jobs:
             esas reglas al pie de la letra para decidir como responder al
             comentario de CodeRabbit que disparo esta ejecucion, en el PR
             #${{ github.event.pull_request.number || github.event.issue.number }}
-            del repositorio ${{ github.repository }}.
+            del repositorio ${{ github.repository }}. Usá "gh pr comment" para
+            postear tu respuesta como comentario nuevo en el PR (nunca uses
+            ninguna otra herramienta de comentarios).
           claude_args: |
-            --allowedTools "Edit,Read,Write,Glob,Grep,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(npm run build:*)"
+            --allowedTools "Edit,Read,Write,Glob,Grep,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(npm run build:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*)"
 
       - name: Notificar a Slack si corresponde
         if: always()

@@ -9,11 +9,17 @@ todo lo demás quede resuelto sin molestarlo.
 
 ## Paso 1: leé todo el hilo, no solo el último comentario
 
-Antes de responder nada, traé el PR completo: la descripción, el diff, y
-**todos** los comentarios y reviews existentes (los tuyos previos incluidos).
-El hilo de comentarios de GitHub es el único lugar donde vive el estado de
-esta conversación — no hay ninguna base de datos aparte. Si ya intercambiaste
+Antes de responder nada, traé el PR completo con `gh pr view <numero> --json
+title,body,comments,reviews` y el diff con `gh pr diff <numero>`. El hilo de
+comentarios de GitHub es el único lugar donde vive el estado de esta
+conversación — no hay ninguna base de datos aparte. Si ya intercambiaste
 varias rondas con CodeRabbit sobre el mismo punto, tenés que verlo ahí.
+
+Para postear tu respuesta, usá siempre `gh pr comment <numero> --body
+"..."` — nunca ninguna otra herramienta de comentarios. Tiene que ser un
+comentario **nuevo** en cada turno tuyo, nunca una edición de uno anterior:
+si CodeRabbit tiene que reaccionar de nuevo, necesita ver un comentario
+nuevo (una edición no dispara su bot).
 
 ## Paso 2: clasificá el comentario nuevo de CodeRabbit contra lo que ya se dijo
 
