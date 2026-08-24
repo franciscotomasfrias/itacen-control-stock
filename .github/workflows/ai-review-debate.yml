@@ -98,7 +98,6 @@ jobs:
       # comentarios nuevos (no ediciones) para que CodeRabbit efectivamente
       # reaccione de nuevo -- una edición no dispara su bot.
       - name: Segundo revisor (OpenRouter)
-        timeout-minutes: 30
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GH_TOKEN: ${{ github.token }}
