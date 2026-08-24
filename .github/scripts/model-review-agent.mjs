@@ -666,6 +666,17 @@ async function main() {
 
     // Secuencial, no en paralelo: un edit_file puede depender del
     // resultado del tool_call anterior dentro del mismo turno.
+    //
+    // Nota (decisión de Francisco, 2026-08-24, PR #5): estos resultados NO
+    // se truncan ni se podan con el tiempo -- toda la conversación se
+    // reenvía completa en cada vuelta del loop. Es una elección deliberada
+    // de completitud estricta (fiel al Paso 1 del protocolo: "leer todo el
+    // hilo") sobre un presupuesto/chunking de contexto, mientras el riesgo
+    // sea teórico a esta escala (PRs y diffs chicos, lejos de los 400k de
+    // contexto del modelo). Si algún día se supera el límite, el propio
+    // finish_reason==="length" de arriba corta la corrida con aviso a
+    // Slack -- la falla queda visible, no silenciosa. No agregar chunking
+    // sin que sea un problema real, no especulativo.
     for (const call of toolCalls) {
       const result = await safeExecuteTool(call);
       messages.push({
