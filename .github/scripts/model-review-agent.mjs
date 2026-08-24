@@ -11,7 +11,7 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readFile, writeFile, unlink, stat, mkdtemp } from 'node:fs/promises';
+import { readFile, writeFile, unlink, stat, mkdtemp, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -55,10 +55,21 @@ function sleep(ms) {
 }
 
 // ---------- Path safety ----------
+//
+// Dos capas, porque una sola no alcanza:
+//  1. Chequeo léxico (path.resolve + path.relative) -- rápido, pero NO
+//     sigue symlinks. Un symlink dentro del repo (ej. "safe-link" ->
+//     ".github" o -> "/tmp") pasa este chequeo sin problema, porque
+//     "safe-link/archivo.txt" resuelve léxicamente a
+//     "<repo>/safe-link/archivo.txt", que sigue "dentro" del repo en el
+//     papel.
+//  2. Chequeo real (fs.realpath) -- sigue symlinks de verdad. Como
+//     fs.writeFile/fs.readFile SÍ siguen symlinks en runtime, hay que
+//     validar el destino real antes de tocar el archivo, no solo el path
+//     tal como lo escribió el modelo. Hallazgo real de CodeRabbit en el
+//     PR #5 sobre la primera versión de este chequeo (solo léxica).
 
-// Usado por read_file (solo lectura -- necesita poder leer cualquier cosa
-// del repo, incluido .github/, para poder razonar sobre el propio sistema).
-function resolveSafePath(userPath) {
+function assertLexicallyContained(userPath) {
   if (typeof userPath !== 'string' || userPath.length === 0) {
     throw new Error('path invalido');
   }
@@ -68,6 +79,41 @@ function resolveSafePath(userPath) {
     throw new Error(`path fuera del repo: ${userPath}`);
   }
   return resolved;
+}
+
+// Devuelve el path REAL (symlinks resueltos) de un path que ya pasó el
+// chequeo léxico. Si el archivo todavía no existe (caso normal de
+// write_file creando uno nuevo), resuelve el directorio padre en su lugar
+// -- ese sí tiene que existir, ninguna tool acá hace mkdir -p.
+async function resolveRealPath(lexicallyContainedPath) {
+  try {
+    return await realpath(lexicallyContainedPath);
+  } catch (err) {
+    if (err?.code !== 'ENOENT') throw err;
+    const parentReal = await realpath(path.dirname(lexicallyContainedPath));
+    return path.join(parentReal, path.basename(lexicallyContainedPath));
+  }
+}
+
+function assertRealPathWithin(realTarget, { forbidGithub } = {}) {
+  const rel = path.relative(REPO_ROOT, realTarget);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error('el path resuelve (via symlink) fuera del repo');
+  }
+  if (forbidGithub && (rel === '.github' || rel.startsWith(`.github${path.sep}`))) {
+    throw new Error(
+      'el path resuelve (via symlink) dentro de .github/ -- son los archivos de gobernanza del propio sistema, ese cambio lo tiene que aplicar un humano'
+    );
+  }
+}
+
+// Usado por read_file (solo lectura -- necesita poder leer cualquier cosa
+// del repo, incluido .github/, para poder razonar sobre el propio sistema).
+async function resolveSafePath(userPath) {
+  const lexical = assertLexicallyContained(userPath);
+  const real = await resolveRealPath(lexical);
+  assertRealPathWithin(real);
+  return real;
 }
 
 // Usado por edit_file/write_file (escritura). Además de estar dentro del
@@ -81,15 +127,17 @@ function resolveSafePath(userPath) {
 // pushear ese cambio sin que nadie lo revise. Hallazgo real del segundo
 // revisor en el PR #5 -- este límite es deliberado, no se debe relajar sin
 // que Francisco lo decida explícitamente.
-function resolveWritablePath(userPath) {
-  const resolved = resolveSafePath(userPath);
-  const rel = path.relative(REPO_ROOT, resolved);
+async function resolveWritablePath(userPath) {
+  const lexical = assertLexicallyContained(userPath);
+  const rel = path.relative(REPO_ROOT, lexical);
   if (rel === '.github' || rel.startsWith(`.github${path.sep}`)) {
     throw new Error(
       `no se puede escribir dentro de .github/ (${userPath}) -- son los archivos de gobernanza del propio sistema, ese cambio lo tiene que aplicar un humano`
     );
   }
-  return resolved;
+  const real = await resolveRealPath(lexical);
+  assertRealPathWithin(real, { forbidGithub: true });
+  return real;
 }
 
 async function withTempFile(prefix, content, fn) {
@@ -156,7 +204,7 @@ async function toolReadPrDiff() {
 }
 
 async function toolReadFile({ path: userPath } = {}) {
-  const filePath = resolveSafePath(userPath);
+  const filePath = await resolveSafePath(userPath);
   const s = await stat(filePath).catch(() => null);
   if (!s) return { ok: false, error: `no existe: ${userPath}` };
   if (!s.isFile()) return { ok: false, error: `no es un archivo: ${userPath}` };
@@ -178,7 +226,7 @@ async function toolEditFile({ path: userPath, old_string, new_string, replace_al
   if (old_string === new_string) {
     return { ok: false, error: 'old_string y new_string son iguales -- no hay nada que cambiar' };
   }
-  const filePath = resolveWritablePath(userPath);
+  const filePath = await resolveWritablePath(userPath);
   const s = await stat(filePath).catch(() => null);
   if (!s || !s.isFile()) return { ok: false, error: `no existe: ${userPath}` };
   const content = await readFile(filePath, 'utf8');
@@ -197,7 +245,7 @@ async function toolEditFile({ path: userPath, old_string, new_string, replace_al
 
 async function toolWriteFile({ path: userPath, content } = {}) {
   if (typeof content !== 'string') return { ok: false, error: 'content es obligatorio' };
-  const filePath = resolveWritablePath(userPath);
+  const filePath = await resolveWritablePath(userPath);
   await writeFile(filePath, content, 'utf8');
   return { ok: true, path: userPath };
 }
