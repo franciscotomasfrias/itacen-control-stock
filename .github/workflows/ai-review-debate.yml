@@ -120,6 +120,37 @@ jobs:
       - name: Instalar dependencias (para que la tool run_build funcione)
         run: npm ci
 
+      # CodeRabbit posta UN comentario apenas arranca a analizar el PR
+      # ("Currently processing new changes... please wait") y lo EDITA in
+      # place cuando termina -- una edicion no dispara "issue_comment:
+      # created", asi que ese evento SIEMPRE nos deja ver el placeholder,
+      # nunca el resultado final. Sin esta espera, el segundo revisor lee
+      # el estado a medio terminar y puede concluir "sin objeciones,
+      # Resuelto" (incluso disparando el Slack de "LISTO PARA REVISAR" del
+      # primer intercambio) antes de que CodeRabbit haya dicho nada real.
+      # Hallazgo real de Francisco probando el cambio de identidad de App.
+      - name: Esperar a que CodeRabbit termine de procesar
+        timeout-minutes: 8
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number || github.event.pull_request.number || github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          MAX_INTENTOS=32  # 32 * 15s = 8 minutos
+          for intento in $(seq 1 "$MAX_INTENTOS"); do
+            PROCESANDO=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate \
+              --jq '[.[] | select(.user.login == "coderabbitai[bot]") | select(.body | contains("Currently processing new changes in this PR"))] | length')
+            if [ "$PROCESANDO" = "0" ]; then
+              echo "CodeRabbit no esta procesando (ya termino, o todavia no arranco). Sigo."
+              exit 0
+            fi
+            echo "Intento $intento/$MAX_INTENTOS: CodeRabbit todavia esta procesando, espero 15s..."
+            sleep 15
+          done
+          echo "CodeRabbit sigue procesando despues de 8 minutos -- corto para no reaccionar con datos incompletos." >&2
+          exit 1
+
       # No le pasamos SLACK_WEBHOOK_URL a este paso: el modelo nunca ve el
       # secret. Si decide notificar, solo escribe un archivo de texto en
       # /tmp (fuera del repo) -- el paso siguiente, que SI corre con el
