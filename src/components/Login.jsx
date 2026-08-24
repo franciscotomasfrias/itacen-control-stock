@@ -11,9 +11,14 @@ export default function Login() {
     e.preventDefault();
     setCargando(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError(error.message);
-    setCargando(false);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setError(error.message);
+    } catch (err) {
+      setError('No se pudo conectar. Revisá tu conexión e intentá de nuevo.');
+    } finally {
+      setCargando(false);
+    }
   };
 
   return (
