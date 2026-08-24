@@ -4,6 +4,16 @@ name: Claude review debate
 # y decide si responde, arregla el codigo, o escala a Francisco por Slack.
 # No corre en respuesta a comentarios de humanos ni a sus propios comentarios
 # anteriores (ver "allowed_bots" mas abajo).
+#
+# Seguridad (repo publico -> cualquiera puede abrir un PR desde un fork):
+# el job "respond" corre con contents:write, el token de Claude, y
+# Edit/Write/Bash(git push) -- si reaccionara a un PR de un fork, leeria el
+# diff de ese PR (texto controlado por quien lo abrio) con permisos reales
+# de escritura sobre este repo. Por eso "resolve-pr" corre primero, sin
+# secretos ni permisos de escritura, y "respond" solo se dispara si
+# resolve-pr confirma que el PR es del mismo repo (no un fork). Si es de un
+# fork, "respond" nunca corre -- CodeRabbit igual lo revisa por su cuenta,
+# sin depender de nuestros secrets. Hallazgo real de CodeRabbit en el PR #4.
 
 on:
   issue_comment:
@@ -18,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  respond:
+  resolve-pr:
     if: >
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request != null &&
@@ -29,6 +39,31 @@ jobs:
         github.event.review.user.login == 'coderabbitai[bot]')
     runs-on: ubuntu-latest
     permissions:
+      pull-requests: read
+    outputs:
+      is_fork: ${{ steps.check.outputs.is_fork }}
+      head_ref: ${{ steps.check.outputs.head_ref }}
+    steps:
+      - name: Determinar si el PR es de un fork
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number || github.event.issue.number }}"
+          PR_JSON=$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" --json headRefName,isCrossRepository)
+          echo "is_fork=$(echo "$PR_JSON" | jq -r .isCrossRepository)" >> "$GITHUB_OUTPUT"
+          echo "head_ref=$(echo "$PR_JSON" | jq -r .headRefName)" >> "$GITHUB_OUTPUT"
+
+  respond:
+    needs: resolve-pr
+    # Ojo: un "if" propio en un job con "needs" reemplaza el chequeo
+    # implicito de que el job anterior haya tenido exito -- hay que
+    # verificarlo a mano con needs.resolve-pr.result.
+    if: >
+      needs.resolve-pr.result == 'success' &&
+      needs.resolve-pr.outputs.is_fork == 'false'
+    runs-on: ubuntu-latest
+    permissions:
       contents: write
       pull-requests: write
       issues: write
@@ -37,6 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          ref: ${{ needs.resolve-pr.outputs.head_ref }}
           fetch-depth: 1
 
       # No le pasamos SLACK_WEBHOOK_URL a este paso: Claude nunca ve el

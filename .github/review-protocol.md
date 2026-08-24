@@ -21,7 +21,28 @@ comentario **nuevo** en cada turno tuyo, nunca una edición de uno anterior:
 si CodeRabbit tiene que reaccionar de nuevo, necesita ver un comentario
 nuevo (una edición no dispara su bot).
 
-## Paso 2: clasificá el comentario nuevo de CodeRabbit contra lo que ya se dijo
+## Paso 2: revisá el diff vos mismo, de forma independiente
+
+Antes de reaccionar a lo que dice CodeRabbit, mirá el diff completo
+(`gh pr diff <numero>`) con tu propio criterio, de forma escéptica — no
+uses este paso para validar lo que ya dijo CodeRabbit, usalo para buscar de
+forma independiente: errores de lógica, violaciones de las reglas de
+negocio de `CLAUDE.md` (ej. `Math.floor` en repartos,
+`multiplicadorRiesgoExclusividad`, paleta `COLORES`), problemas de
+seguridad, o simplificaciones reales que CodeRabbit no haya mencionado. El
+objetivo es generar una segunda opinión real, no repetir la de CodeRabbit.
+
+Si encontrás algo así, es un **punto nuevo tuyo** — sumalo a los puntos de
+este turno. No hace falta que ya tengas la solución: alcanza con que el
+punto sea específico y accionable, es decir, que señale un archivo/línea y
+un caso o escenario concreto que lo amerite explorar (aunque el arreglo
+todavía no esté claro, o sea directamente una pregunta abierta que valga la
+pena discutir). Lo que no vale es una sospecha genérica sin caso concreto
+detrás ("revisar esto", "podría haber un problema acá"). Si no encontrás
+nada así de concreto, no inventes un punto para tener algo que decir —
+seguí sin agregar nada propio en esta ronda.
+
+## Paso 3: clasificá el comentario nuevo de CodeRabbit contra lo que ya se dijo
 
 Para cada punto que toca CodeRabbit, decidí cuál de estas cuatro categorías
 aplica, comparándolo con la última postura tuya (o la del propio CodeRabbit)
@@ -32,7 +53,7 @@ sobre ese mismo punto:
   intercambio en ese punto.
 - **Coincide pero suma información nueva** (respaldo): agrega un caso límite,
   una referencia, o un detalle que no habías considerado. → Evaluá si ese
-  dato cambia tu conclusión. Si la cambia, actuá en consecuencia (ver Paso 3).
+  dato cambia tu conclusión. Si la cambia, actuá en consecuencia (ver Paso 4).
   Si no la cambia pero el dato es válido, reconocelo brevemente y cerrá igual.
 - **Contradice tu postura o la tuya la contradice a ella**: hay una
   conclusión incompatible (uno dice "está bien", el otro "hay que
@@ -42,7 +63,7 @@ sobre ese mismo punto:
   para efectos de esta conversación puntual (podés tratarlo como un punto
   nuevo aparte si de verdad amerita).
 
-## Paso 3: si el punto es válido, arreglalo vos directamente
+## Paso 4: si el punto es válido, arreglalo vos directamente
 
 Si concluís que CodeRabbit (o vos mismo en una ronda anterior) señaló algo
 real y el arreglo es claro y de bajo riesgo, no te quedes debatiendo en
@@ -50,7 +71,7 @@ comentarios: editá el código, commiteá, y pusheá a la misma rama del PR.
 Dejá un comentario corto explicando qué cambiaste y por qué. Esto es
 preferible a una discusión larga cuando la solución no es ambigua.
 
-## Paso 4: contá las rondas de ida y vuelta sobre CADA punto puntual
+## Paso 5: contá las rondas de ida y vuelta sobre CADA punto puntual
 
 Por cada punto específico (no por el PR entero), contá cuántas veces se
 contradijeron vos y CodeRabbit sin converger. Si llegás a la **tercera**
@@ -63,21 +84,39 @@ Mismo criterio si CodeRabbit sigue agregando "respaldo" (información nueva)
 más de tres veces seguidas sin que vos llegues a una conclusión clara: en
 algún punto la ambigüedad real amerita que decida una persona, no vos.
 
-## Paso 5: al final de tu turno, dejá clara la conclusión de este comentario
+## Paso 6: al final de tu turno, dejá clara la conclusión de este comentario
 
-Terminá tu respuesta con una de estas tres cosas, explícitamente:
+Terminá tu respuesta con una de estas tres cosas, explícitamente, por cada
+punto que trataste en este turno:
 
 - **Resuelto**: quedó claro qué hacer y ya lo hiciste (o no hacía falta
   hacer nada). No hace falta que Francisco mire este punto.
 - **Sigue en debate**: esperás que CodeRabbit responda de nuevo (por ejemplo,
   porque le hiciste una pregunta concreta o señalaste algo que falta
   verificar). Todavía no está en punto muerto.
-- **Escalado**: tocó el límite de rondas del Paso 4, o es una decisión de
+- **Escalado**: tocó el límite de rondas del Paso 5, o es una decisión de
   producto/negocio que no te corresponde a vos (ej. "¿este comportamiento es
   el que quiere el cliente?"). Marcá explícitamente `ESCALADO` en tu
   comentario para que sea fácil de encontrar.
 
-## Paso 6: notificá a Slack solo cuando corresponda
+**Excepción para el primer intercambio del PR**: en tu primera respuesta a
+CodeRabbit en todo el hilo de este PR, dejá siempre un comentario — aunque
+no haya ningún punto, ni de CodeRabbit ni tuyo (Paso 2), que amerite
+discusión. Esto deja constancia de que el segundo revisor efectivamente miró
+el PR, no que simplemente nadie encontró nada. Usá algo así, sin adornos:
+
+```text
+Revisé el PR de forma independiente (comentario de CodeRabbit + diff
+completo). No tengo objeciones propias que agregar. Resuelto.
+```
+
+**A partir del segundo intercambio en adelante**, si no hay ningún punto
+nuevo tuyo (Paso 2) ni nada que responder de lo que ya se dijo, no comentes
+solo para reafirmar silencio — evitá el ruido de repetir "sigo sin
+objeciones" en cada ronda. Comentá solo cuando haya algo real que decir: un
+punto nuevo, una respuesta a algo en debate, o el cierre final del PR.
+
+## Paso 7: notificá a Slack solo cuando corresponda
 
 Vos no tenés (ni podés tener) la URL del webhook de Slack — por diseño, para
 que ni vos ni nadie que manipule un PR pueda leerla. En vez de mandar el
@@ -87,9 +126,10 @@ workflow, que sí tiene el secret, lo lee y lo manda después de que termines.
 
 Escribí ese archivo en estos casos, y en ningún otro:
 
-1. **Escalaste algo** en el Paso 5.
+1. **Escalaste algo** en el Paso 6.
 2. **Ya no queda ningún punto en "sigue en debate"** en todo el PR (todos los
-   puntos llegaron a Resuelto o Escalado).
+   puntos llegaron a Resuelto o Escalado) — incluye el caso del primer
+   intercambio sin objeciones de ninguno de los dos lados.
 
 No escribas ese archivo si todavía hay puntos en debate activo esperando la
 próxima respuesta de CodeRabbit — eso generaría ruido por cada ida y vuelta
@@ -137,6 +177,11 @@ pueda entrar directo desde Slack y mergear ahí si corresponde.
 - Si dudás entre dos alternativas de diseño (no de corrección de bug), eso
   es candidato a `ESCALADO` directamente, no a debate — eso lo decide
   Francisco.
+- Los puntos que agregues por iniciativa propia (Paso 2) tienen que ser
+  específicos y accionables — archivo/línea y un caso o escenario concreto
+  que lo amerite, aunque todavía no tengas la solución. Si no podés ser así
+  de específico, no es un punto: es ruido, y no lo escribís.
 - Nunca respondas tu propio comentario anterior como si fuera de otra
   persona. Si releíste el hilo y no hay nada nuevo de CodeRabbit desde tu
   última intervención, no hagas nada.
+</content>
