@@ -12,10 +12,12 @@ name: AI review debate
 # a mano, no usa el SDK/action de ningún proveedor).
 #
 # Seguridad (repo publico -> cualquiera puede abrir un PR desde un fork):
-# el job "respond" corre con contents:write, la API key de OpenRouter, y
-# capacidad de editar archivos y hacer push -- si reaccionara a un PR de un
-# fork, leeria el diff de ese PR (texto controlado por quien lo abrio) con
-# permisos reales de escritura sobre este repo. Por eso "resolve-pr" corre
+# el job "respond" genera un token de instalacion de la GitHub App "AI
+# Second Reviewer" (permiso real de escritura, ver mas abajo), la API key
+# de OpenRouter, y capacidad de editar archivos y hacer push -- si
+# reaccionara a un PR de un fork, leeria el diff de ese PR (texto
+# controlado por quien lo abrio) con permisos reales de escritura sobre
+# este repo. Por eso "resolve-pr" corre
 # primero, sin secretos ni permisos de escritura, y "respond" solo se
 # dispara si resolve-pr confirma que el PR es del mismo repo (no un fork).
 # Si es de un fork, "respond" nunca corre -- CodeRabbit igual lo revisa por
@@ -90,27 +92,19 @@ jobs:
     permissions:
       contents: read
     steps:
-      # Token de instalacion de la GitHub App "AI Second Reviewer" en vez
-      # del token default de Actions -- asi los comentarios/commits del
-      # segundo revisor aparecen con identidad propia
-      # (ai-second-reviewer[bot]) en vez de "github-actions[bot]" generico.
-      # Los permisos reales de este token estan acotados por los permisos
-      # configurados en la propia App (Contents/Issues/Pull requests:
-      # read & write, nada de Workflows) -- ver github.com/settings/apps.
-      - name: Generar token de la App
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          app-id: ${{ secrets.AI_REVIEWER_APP_ID }}
-          private-key: ${{ secrets.AI_REVIEWER_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: itacen-control-stock
-
+      # Checkout con el token default (read-only, ver "permissions" del
+      # job arriba) -- todavia no necesitamos el token de la App. Asi el
+      # token con permiso de escritura no existe en el runner durante
+      # "npm ci" (que ejecuta codigo de terceros, install scripts
+      # incluidos) -- reduce la ventana en la que un supply-chain
+      # comprometido podria llegar a leerlo. persist-credentials:false
+      # porque el push mas adelante usa una credencial propia (ver abajo),
+      # no la que deja actions/checkout.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ needs.resolve-pr.outputs.head_ref }}
           fetch-depth: 1
-          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -119,6 +113,38 @@ jobs:
 
       - name: Instalar dependencias (para que la tool run_build funcione)
         run: npm ci
+
+      # Token de instalacion de la GitHub App "AI Second Reviewer" en vez
+      # del token default de Actions -- asi los comentarios/commits del
+      # segundo revisor aparecen con identidad propia
+      # (ai-second-reviewer[bot]) en vez de "github-actions[bot]" generico.
+      # Generado recien aca (despues de "npm ci", justo antes de usarse)
+      # para minimizar cuanto tiempo un token con permiso de escritura
+      # existe en el runner. Los permission-* son explicitos (no
+      # heredados en silencio de lo que la App tenga configurado en
+      # github.com/settings/apps) para que un cambio futuro en los
+      # permisos de la App no amplie sin querer lo que este token puede
+      # hacer -- defensa en profundidad. Hallazgo real de CodeRabbit en
+      # este PR.
+      - name: Generar token de la App
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.AI_REVIEWER_APP_ID }}
+          private-key: ${{ secrets.AI_REVIEWER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: itacen-control-stock
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      # El checkout de arriba no dejo ninguna credencial (persist-credentials:
+      # false) -- reescribimos el remote con el token de la App reciente
+      # explicitamente, solo para el push que hace el agente. "gh" (usado
+      # para comentar) no necesita esto: lee GH_TOKEN de las envs de los
+      # pasos siguientes directamente.
+      - name: Configurar remote de git con el token de la App
+        run: git remote set-url origin "https://x-access-token:${{ steps.app-token.outputs.token }}@github.com/${{ github.repository }}.git"
 
       # CodeRabbit posta UN comentario apenas arranca a analizar el PR
       # ("Currently processing new changes... please wait") y lo EDITA in
