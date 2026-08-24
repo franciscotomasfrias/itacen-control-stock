@@ -98,6 +98,11 @@ jobs:
       # comentarios nuevos (no ediciones) para que CodeRabbit efectivamente
       # reaccione de nuevo -- una edición no dispara su bot.
       - name: Segundo revisor (OpenRouter)
+        # Tope de duración/costo: el script ya corta solo a los 40
+        # tool-calls (ver MAX_ITERATIONS en model-review-agent.mjs), pero
+        # esto es una red de seguridad extra a nivel del step -- sin esto,
+        # el timeout por defecto del job es 360 minutos.
+        timeout-minutes: 20
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GH_TOKEN: ${{ github.token }}
