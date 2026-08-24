@@ -49,12 +49,3 @@ export async function upsertCarga(fecha, persona, valores) {
   );
   if (error) throw error;
 }
-
-// Para el generador de historico de prueba: manda todas las filas en una sola
-// llamada en vez de una por dia (mas rapido, y Supabase no tiene el limite de
-// requests que tenia el storage de Claude, pero de todas formas es mejor asi).
-export async function upsertCargasBulk(filas) {
-  if (filas.length === 0) return;
-  const { error } = await supabase.from('cargas').upsert(filas, { onConflict: 'fecha,persona' });
-  if (error) throw error;
-}

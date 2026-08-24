@@ -9,7 +9,7 @@ import {
   DEFAULT_CONFIG, DEFAULT_PLAN_GERENCIA,
   formatFecha, esDiaHabil, sumarDias, hexConAlpha, capitalizar,
   formatRangoSemana, formatRangoCorto, generarFechasDelPlan, fechaInicioSemanaAnterior,
-  demandaDiariaSemana, calcularPlanDelDia, optimizarBuffers, gaussianRandom,
+  demandaDiariaSemana, calcularPlanDelDia, optimizarBuffers,
   cajasPorOperarioPorDia,
 } from '../lib/logic';
 
@@ -25,7 +25,7 @@ import {
   getPlan, setPlan as setPlanDB,
   getAusencias, setAusencias as setAusenciasDB,
   getBuffer, setBuffer as setBufferDB,
-  getCargas, upsertCargasBulk,
+  getCargas,
 } from '../lib/db';
 
 export default function PanelGerenciaView() {
@@ -41,8 +41,6 @@ export default function PanelGerenciaView() {
   const [cargandoDashboards, setCargandoDashboards] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [fechaAusencia, setFechaAusencia] = useState(new Date());
-  const [generando, setGenerando] = useState(false);
-  const [progresoGeneracion, setProgresoGeneracion] = useState(0);
 
   const cargarBase = useCallback(async () => {
     setLoading(true);
@@ -190,154 +188,6 @@ export default function PanelGerenciaView() {
     .map((s, i) => ({ i, total: s.moto + s.auto + s.camion }))
     .filter(({ total }) => total > capacidadSemanalEquipo * 1.5);
 
-  const generarHistorico3Meses = async () => {
-    setGenerando(true);
-    setProgresoGeneracion(0);
-    try {
-      const hoy = new Date();
-      const fin = sumarDias(hoy, -1);
-      const inicio = sumarDias(hoy, -90);
-      const dias = [];
-      let cursor = new Date(inicio);
-      while (cursor <= fin) {
-        if (esDiaHabil(cursor)) dias.push(new Date(cursor));
-        cursor = sumarDias(cursor, 1);
-      }
-
-      const diasPorSemana = config.diasHabilesPorSemana;
-      const semanas = [];
-      for (let i = 0; i < dias.length; i += diasPorSemana) {
-        const factor = 0.8 + Math.random() * 0.4;
-        semanas.push({
-          moto: Math.round(8 * diasPorSemana * factor),
-          auto: Math.round(20 * diasPorSemana * factor),
-          camion: Math.round(17 * diasPorSemana * factor),
-        });
-      }
-      const nuevoPlan = { fechaInicio: formatFecha(dias[0]), semanas };
-
-      const nuevasAusencias = {};
-      dias.forEach((d) => {
-        const key = formatFecha(d);
-        const ausentesDia = [];
-        OPERARIOS.forEach((op) => {
-          const probAusencia = op === COMODIN ? 0.04 : 0.035;
-          if (Math.random() < probAusencia) ausentesDia.push(op);
-        });
-        if (ausentesDia.length > 0) nuevasAusencias[key] = ausentesDia;
-      });
-
-      const bufferBase = (bufferObjetivo.moto || bufferObjetivo.auto || bufferObjetivo.camion)
-        ? bufferObjetivo
-        : { moto: 40, auto: 150, camion: 100 };
-
-      let stockAlmacen = { ...bufferBase };
-      const wip = {};
-      OPERARIOS.forEach((op) => { wip[op] = { moto: 0, auto: 0, camion: 0 }; });
-      const capacidadPersona = cajasPorOperarioPorDia(config);
-      const nuevasCargas = {};
-
-      for (let i = 0; i < dias.length; i++) {
-        const fecha = dias[i];
-        const key = formatFecha(fecha);
-        const ausentesHoy = nuevasAusencias[key] || [];
-        const baseDisponibles = BASE_OPERARIOS.filter((op) => !ausentesHoy.includes(op));
-        const capacidadBase = baseDisponibles.length * capacidadPersona;
-        const stockEfectivo = {};
-        TIPOS.forEach((t) => {
-          stockEfectivo[t] = stockAlmacen[t] + OPERARIOS.reduce((s, op) => s + (wip[op][t] || 0), 0);
-        });
-        const gaps = {};
-        TIPOS.forEach((t) => { gaps[t] = Math.max(0, (bufferBase[t] || 0) - stockEfectivo[t]); });
-        const totalGap = TIPOS.reduce((s, t) => s + gaps[t], 0);
-        const comodinDisp = !ausentesHoy.includes(COMODIN);
-        const necesitaComodin = totalGap > capacidadBase && comodinDisp;
-        const presentes = necesitaComodin ? [...baseDisponibles, COMODIN] : baseDisponibles;
-        const capacidadHoy = presentes.length * capacidadPersona;
-
-        const plan = { moto: 0, auto: 0, camion: 0 };
-        if (totalGap > 0 && capacidadHoy > 0) {
-          let restante = capacidadHoy;
-          TIPOS.forEach((t) => {
-            const porcion = capacidadHoy * (gaps[t] / totalGap);
-            const asignado = Math.max(0, Math.floor(Math.min(Math.round(porcion), gaps[t], restante)));
-            plan[t] = asignado; restante -= asignado;
-          });
-        }
-        const reparto = {};
-        presentes.forEach((op) => { reparto[op] = { moto: 0, auto: 0, camion: 0 }; });
-        let idx = 0;
-        TIPOS.forEach((t) => {
-          for (let k = 0; k < plan[t]; k++) {
-            if (presentes.length === 0) break;
-            reparto[presentes[idx % presentes.length]][t] += 1;
-            idx++;
-          }
-        });
-
-        presentes.forEach((op) => {
-          TIPOS.forEach((t) => {
-            const ruido = 0.85 + Math.random() * 0.3;
-            wip[op][t] += Math.max(0, Math.round(reparto[op][t] * ruido));
-          });
-        });
-
-        OPERARIOS.forEach((op) => {
-          if (Math.random() < 0.45) {
-            TIPOS.forEach((t) => { stockAlmacen[t] += wip[op][t]; wip[op][t] = 0; });
-          }
-        });
-
-        const semanaIdx = Math.min(Math.floor(i / diasPorSemana), semanas.length - 1);
-        const demandaSemana = semanas[semanaIdx];
-        TIPOS.forEach((t) => {
-          const media = demandaSemana[t] / diasPorSemana;
-          const desvio = media * config.desvioRelativoDemanda;
-          let demanda = Math.max(0, Math.round(gaussianRandom(media, desvio)));
-          if (Math.random() < config.probPedidoUrgente) {
-            const [lo, hi] = config.tamanioPedidoUrgente[t];
-            demanda += Math.floor(lo + Math.random() * (hi - lo + 1));
-          }
-          const entregado = Math.min(demanda, stockAlmacen[t]);
-          stockAlmacen[t] -= entregado;
-          if (Math.random() < config.probReleaseDiaria[t]) stockAlmacen[t] = 0;
-        });
-
-        const cargaDia = { 'Almacén': { ...stockAlmacen } };
-        presentes.forEach((op) => { cargaDia[op] = { ...wip[op] }; });
-        nuevasCargas[key] = cargaDia;
-        if (i % 5 === 0) setProgresoGeneracion(Math.round(((i + 1) / dias.length) * 90));
-      }
-      setProgresoGeneracion(95);
-
-      // con Postgres no hace falta traer y mergear el historico previo: cada fila
-      // es independiente (fecha, persona), asi que un upsert masivo alcanza.
-      const filasParaSubir = [];
-      Object.entries(nuevasCargas).forEach(([fecha, porPersona]) => {
-        Object.entries(porPersona).forEach(([persona, valores]) => {
-          filasParaSubir.push({ fecha, persona, ...valores });
-        });
-      });
-
-      await setConfigDB(config);
-      await setPlanDB(nuevoPlan);
-      await setAusenciasDB(nuevasAusencias);
-      await setBufferDB(bufferBase);
-      await upsertCargasBulk(filasParaSubir);
-      setProgresoGeneracion(100);
-
-      setPlan(nuevoPlan);
-      setAusenciasPorFecha(nuevasAusencias);
-      setBufferObjetivo(bufferBase);
-      setCargasPorFecha((prev) => ({ ...prev, ...nuevasCargas }));
-      mostrarMensaje('ok', `Histórico generado: ${dias.length} días hábiles, ${filasParaSubir.length} registros de stock.`);
-    } catch (e) {
-      mostrarMensaje('error', `No se pudo generar el histórico completo: ${e && e.message ? e.message : 'error desconocido'}`);
-    } finally {
-      setGenerando(false);
-    }
-  };
-
   return (
     <div className="w-full min-h-screen" style={{ background: '#12151A', color: '#E7E5E0', fontFamily: "'Inter', system-ui, sans-serif" }}>
       <style>{`
@@ -424,25 +274,6 @@ export default function PanelGerenciaView() {
                   );
                 })}
               </div>
-            </div>
-
-            <div className="rounded-xl p-4" style={{ background: '#1B1F27', border: '1px dashed #2A2F3A' }}>
-              <div className="text-xs uppercase tracking-wider mono mb-1" style={{ color: '#6B7280' }}>Datos de prueba</div>
-              <div className="text-xs mb-3" style={{ color: '#8B8F98' }}>
-                Genera 3 meses de historial y lo escribe en toda la app: parámetros, plan semanal,
-                ausencias y las cargas diarias de Almacén y los 6 operarios (respetando al comodín
-                Miguel). Al volver a la pestaña "Carga diaria" ya vas a ver ese historial ahí también.
-                Sobrescribe el plan y las ausencias actuales.
-              </div>
-              <button
-                onClick={generarHistorico3Meses}
-                disabled={generando}
-                className="w-full py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
-                style={{ background: hexConAlpha('#94A3B8', 0.15), color: '#B7BAC2' }}
-              >
-                {generando ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                {generando ? `Generando… ${progresoGeneracion}%` : 'Generar histórico de 3 meses'}
-              </button>
             </div>
           </div>
         )}
