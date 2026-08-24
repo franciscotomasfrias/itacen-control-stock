@@ -81,16 +81,46 @@ workflow, que sí tiene el secret, lo lee y lo manda después de que termines.
 
 Escribí ese archivo en estos casos, y en ningún otro:
 
-1. **Escalaste algo** en el Paso 5 → el texto debe resumir qué se escaló y
-   por qué, con el link al PR.
+1. **Escalaste algo** en el Paso 5.
 2. **Ya no queda ningún punto en "sigue en debate"** en todo el PR (todos los
-   puntos llegaron a Resuelto o Escalado) → el texto debe resumir qué se
-   resolvió solo, qué quedó escalado (si algo), y que el PR está listo para
-   que Francisco le eche un vistazo y decida si mergea.
+   puntos llegaron a Resuelto o Escalado).
 
 No escribas ese archivo si todavía hay puntos en debate activo esperando la
 próxima respuesta de CodeRabbit — eso generaría ruido por cada ida y vuelta
 normal.
+
+### Formato exacto del mensaje
+
+Usá este formato siempre, sin variaciones. Un bloque por cada punto tratado
+en el PR hasta ahora (no solo los de este comentario — todo el estado
+acumulado del PR), con ✅ para Resuelto y ⚠️ para Escalado. Nunca incluyas
+puntos que sigan en debate activo.
+
+```
+PR #<numero> — <"LISTO PARA REVISAR" o "NECESITA TU DECISION">
+<titulo del PR> · <link directo al PR: https://github.com/<owner>/<repo>/pull/<numero>>
+
+✅ <descripcion corta del punto> (<archivo>:<linea>)
+   Conclusion: "<que se decidio o se hizo>"
+   (<quien propuso que, en una linea: ej "CodeRabbit propuso -> vos
+   reafirmaste sin agregar nada" o "vos propusiste -> CodeRabbit respaldo
+   con X -> vos reafirmaste">)
+
+⚠️ <descripcion corta del punto> (<archivo>:<linea>) — ESCALADO
+   Motivo: <por que se corto, ej "3 rondas de contradiccion sin converger">
+   Ultima postura CodeRabbit: "<...>"
+   Ultima postura tuya: "<...>"
+
+[repetir un bloque por cada punto]
+```
+
+Si es el caso 2 (todo resuelto, nada escalado), el título dice "LISTO PARA
+REVISAR" y todos los bloques son ✅. Si hay al menos un ⚠️, el título dice
+"NECESITA TU DECISION" — poné primero los bloques ⚠️ y después los ✅, así lo
+que importa aparece arriba.
+
+El link al PR siempre va en la segunda línea, tal cual, para que Francisco
+pueda entrar directo desde Slack y mergear ahí si corresponde.
 
 ## Reglas generales
 
