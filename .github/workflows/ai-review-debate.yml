@@ -1,19 +1,26 @@
-name: Claude review debate
+name: AI review debate
 
 # Reacciona cuando CodeRabbit comenta en un PR: lee .github/review-protocol.md
 # y decide si responde, arregla el codigo, o escala a Francisco por Slack.
 # No corre en respuesta a comentarios de humanos ni a sus propios comentarios
 # anteriores (ver "allowed_bots" mas abajo).
 #
+# El segundo revisor es un modelo elegido vía OpenRouter (hoy:
+# openai/gpt-5.3-codex, ver MODEL abajo) -- no depende de la infraestructura
+# de ningún proveedor puntual, así que cambiar de modelo es una sola línea
+# (.github/scripts/model-review-agent.mjs implementa el loop de tool-calling
+# a mano, no usa el SDK/action de ningún proveedor).
+#
 # Seguridad (repo publico -> cualquiera puede abrir un PR desde un fork):
-# el job "respond" corre con contents:write, el token de Claude, y
-# Edit/Write/Bash(git push) -- si reaccionara a un PR de un fork, leeria el
-# diff de ese PR (texto controlado por quien lo abrio) con permisos reales
-# de escritura sobre este repo. Por eso "resolve-pr" corre primero, sin
-# secretos ni permisos de escritura, y "respond" solo se dispara si
-# resolve-pr confirma que el PR es del mismo repo (no un fork). Si es de un
-# fork, "respond" nunca corre -- CodeRabbit igual lo revisa por su cuenta,
-# sin depender de nuestros secrets. Hallazgo real de CodeRabbit en el PR #4.
+# el job "respond" corre con contents:write, la API key de OpenRouter, y
+# capacidad de editar archivos y hacer push -- si reaccionara a un PR de un
+# fork, leeria el diff de ese PR (texto controlado por quien lo abrio) con
+# permisos reales de escritura sobre este repo. Por eso "resolve-pr" corre
+# primero, sin secretos ni permisos de escritura, y "respond" solo se
+# dispara si resolve-pr confirma que el PR es del mismo repo (no un fork).
+# Si es de un fork, "respond" nunca corre -- CodeRabbit igual lo revisa por
+# su cuenta, sin depender de nuestros secrets. Hallazgo real de CodeRabbit
+# en el PR #4.
 
 on:
   issue_comment:
@@ -24,7 +31,7 @@ on:
     types: [submitted]
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: ai-review-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
@@ -67,40 +74,37 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      id-token: write
-      actions: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ needs.resolve-pr.outputs.head_ref }}
           fetch-depth: 1
 
-      # No le pasamos SLACK_WEBHOOK_URL a este paso: Claude nunca ve el
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias (para que la tool run_build funcione)
+        run: npm ci
+
+      # No le pasamos SLACK_WEBHOOK_URL a este paso: el modelo nunca ve el
       # secret. Si decide notificar, solo escribe un archivo de texto en
       # /tmp (fuera del repo) -- el paso siguiente, que SI corre con el
       # secret, es el unico que llega a mandar algo a Slack.
-      - uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1
+      #
+      # GH_TOKEN es necesario para que "gh" funcione dentro de las
+      # herramientas del agente (leer/comentar el PR). Necesitamos
+      # comentarios nuevos (no ediciones) para que CodeRabbit efectivamente
+      # reaccione de nuevo -- una edición no dispara su bot.
+      - name: Segundo revisor (OpenRouter)
         env:
-          # Necesario para que "gh pr comment" funcione dentro del Bash del
-          # agente. El comment-server interno de la action solo sirve para
-          # EDITAR un comentario propio ya existente, no para postear un
-          # comentario nuevo -- y necesitamos comentarios nuevos para que
-          # CodeRabbit efectivamente reaccione de nuevo (una edicion no
-          # dispara su bot).
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          allowed_bots: "coderabbitai[bot]"
-          prompt: |
-            Lee el archivo .github/review-protocol.md de este repo y seguí
-            esas reglas al pie de la letra para decidir como responder al
-            comentario de CodeRabbit que disparo esta ejecucion, en el PR
-            #${{ github.event.pull_request.number || github.event.issue.number }}
-            del repositorio ${{ github.repository }}. Usá "gh pr comment" para
-            postear tu respuesta como comentario nuevo en el PR (nunca uses
-            ninguna otra herramienta de comentarios).
-          claude_args: |
-            --allowedTools "Edit,Read,Write,Glob,Grep,Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(npm run build:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*)"
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          MODEL: openai/gpt-5.3-codex
+        run: node .github/scripts/model-review-agent.mjs
 
       - name: Notificar a Slack si corresponde
         if: always()

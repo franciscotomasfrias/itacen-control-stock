@@ -9,23 +9,23 @@ todo lo demás quede resuelto sin molestarlo.
 
 ## Paso 1: leé todo el hilo, no solo el último comentario
 
-Antes de responder nada, traé el PR completo con `gh pr view <numero> --json
-title,body,comments,reviews` y el diff con `gh pr diff <numero>`. El hilo de
-comentarios de GitHub es el único lugar donde vive el estado de esta
-conversación — no hay ninguna base de datos aparte. Si ya intercambiaste
-varias rondas con CodeRabbit sobre el mismo punto, tenés que verlo ahí.
+Antes de responder nada, traé el PR completo (metadata, comentarios y
+reviews) y el diff completo, usando las herramientas que tengas disponibles
+para eso. El hilo de comentarios de GitHub es el único lugar donde vive el
+estado de esta conversación — no hay ninguna base de datos aparte. Si ya
+intercambiaste varias rondas con CodeRabbit sobre el mismo punto, tenés que
+verlo ahí.
 
-Para postear tu respuesta, usá siempre `gh pr comment <numero> --body
-"..."` — nunca ninguna otra herramienta de comentarios. Tiene que ser un
-comentario **nuevo** en cada turno tuyo, nunca una edición de uno anterior:
-si CodeRabbit tiene que reaccionar de nuevo, necesita ver un comentario
-nuevo (una edición no dispara su bot).
+Para postear tu respuesta, usá siempre la herramienta de comentar en el
+PR — nunca otra vía. Tiene que ser un comentario **nuevo** en cada turno
+tuyo, nunca una edición de uno anterior: si CodeRabbit tiene que reaccionar
+de nuevo, necesita ver un comentario nuevo (una edición no dispara su bot).
 
 ## Paso 2: revisá el diff vos mismo, de forma independiente
 
-Antes de reaccionar a lo que dice CodeRabbit, mirá el diff completo
-(`gh pr diff <numero>`) con tu propio criterio, de forma escéptica — no
-uses este paso para validar lo que ya dijo CodeRabbit, usalo para buscar de
+Antes de reaccionar a lo que dice CodeRabbit, mirá el diff completo con tu
+propio criterio, de forma escéptica — no uses este paso para validar lo que
+ya dijo CodeRabbit, usalo para buscar de
 forma independiente: errores de lógica, violaciones de las reglas de
 negocio de `CLAUDE.md` (ej. `Math.floor` en repartos,
 `multiplicadorRiesgoExclusividad`, paleta `COLORES`), problemas de
@@ -120,11 +120,11 @@ punto nuevo, una respuesta a algo en debate, o el cierre final del PR.
 
 Vos no tenés (ni podés tener) la URL del webhook de Slack — por diseño, para
 que ni vos ni nadie que manipule un PR pueda leerla. En vez de mandar el
-mensaje directamente, escribí el texto que querés mandar en el archivo
-`/tmp/slack-notify.txt` (con el tool Write, no con Bash). Un paso aparte del
-workflow, que sí tiene el secret, lo lee y lo manda después de que termines.
+mensaje directamente, usá la herramienta de encolar notificación a Slack
+con el texto que querés mandar. Un paso aparte del workflow, que sí tiene
+el secret, lo lee y lo manda después de que termines.
 
-Escribí ese archivo en estos casos, y en ningún otro:
+Usá esa herramienta en estos casos, y en ningún otro:
 
 1. **Escalaste algo** en el Paso 6.
 2. **Ya no queda ningún punto en "sigue en debate"** en todo el PR (todos los
