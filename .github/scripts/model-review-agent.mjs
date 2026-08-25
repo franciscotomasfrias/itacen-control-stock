@@ -332,7 +332,36 @@ async function toolGitCommitAndPush({ message } = {}) {
     hasChanges = true;
   }
   if (!hasChanges) {
-    return { ok: false, error: 'nada para commitear' };
+    // Sin cambios nuevos para stagear, pero puede haber un commit local de
+    // un intento anterior en esta misma corrida cuyo "git push" falló --
+    // en ese caso hay que reintentar el push, no reportar "nada para
+    // commitear" (ese mensaje hacía perder de vista un commit ya hecho
+    // pero nunca publicado, dejando el reintento atascado sin señal
+    // clara).
+    let aheadCount;
+    try {
+      const { stdout } = await execFileP(
+        'git',
+        ['rev-list', '--count', `origin/${BRANCH}..HEAD`],
+        { cwd: REPO_ROOT },
+      );
+      aheadCount = Number(stdout.trim()) || 0;
+    } catch (err) {
+      return { ok: false, step: 'ahead-check', error: String(err.message || err).slice(0, 2000) };
+    }
+
+    if (aheadCount === 0) {
+      return { ok: false, error: 'nada para commitear' };
+    }
+
+    try {
+      await execFileP('git', ['push', 'origin', BRANCH], { cwd: REPO_ROOT });
+    } catch (err) {
+      return { ok: false, step: 'push', error: String(err.message || err).slice(0, 2000) };
+    }
+
+    const { stdout: sha } = await execFileP('git', ['rev-parse', '--short', 'HEAD'], { cwd: REPO_ROOT });
+    return { ok: true, commit: sha.trim(), branch: BRANCH, pendingPushRetried: true };
   }
 
   try {
