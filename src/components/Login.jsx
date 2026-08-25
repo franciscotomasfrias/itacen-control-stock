@@ -6,6 +6,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(false);
+  const [mostrarPassword, setMostrarPassword] = useState(false);
 
   const entrar = async (e) => {
     e.preventDefault();
@@ -49,16 +50,27 @@ export default function Login() {
         />
 
         <label htmlFor="login-password" className="block text-xs mb-1" style={{ color: '#8B8F98' }}>Contraseña</label>
-        <input
-          id="login-password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full mb-5 rounded-lg px-3 py-2 text-sm outline-none"
-          style={{ background: '#12151A', border: '1px solid #2A2F3A', color: '#E7E5E0' }}
-        />
+        <div className="relative mb-5">
+          <input
+            id="login-password"
+            type={mostrarPassword ? 'text' : 'password'}
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 pr-10 text-sm outline-none"
+            style={{ background: '#12151A', border: '1px solid #2A2F3A', color: '#E7E5E0' }}
+          />
+          <button
+            type="button"
+            onClick={() => setMostrarPassword((v) => !v)}
+            aria-label={mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs"
+            style={{ color: '#8B8F98' }}
+          >
+            {mostrarPassword ? 'Ocultar' : 'Mostrar'}
+          </button>
+        </div>
 
         <button
           type="submit"
