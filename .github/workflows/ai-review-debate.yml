@@ -80,7 +80,8 @@ jobs:
         github.event.review.user.login == 'coderabbitai[bot]') ||
       (github.event_name == 'status' &&
         github.event.context == 'CodeRabbit' &&
-        github.event.state != 'pending')
+        github.event.state != 'pending' &&
+        github.event.sender.id == 136622811)
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
@@ -94,13 +95,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           PR_NUMBER="${{ github.event.inputs.pr_number || github.event.pull_request.number || github.event.issue.number }}"
           if [ -z "$PR_NUMBER" ]; then
             # Evento "status": no trae numero de PR directo (solo el SHA
-            # del commit) -- lo resolvemos buscando el PR abierto que
-            # tiene ese commit como HEAD.
+            # del commit) -- lo resolvemos buscando el PR abierto cuyo HEAD
+            # actual es exactamente ese commit. /commits/{sha}/pulls
+            # devuelve PRs que CONTIENEN el commit en su historial, no solo
+            # el que lo tiene como HEAD -- sin el filtro por head.sha, un
+            # PR viejo con mas commits encima podria matchear por error y
+            # el segundo revisor reaccionaria/pushearia sobre el PR
+            # equivocado. Hallazgo real de CodeRabbit en este mismo PR.
             PR_NUMBER=$(gh api "repos/${{ github.repository }}/commits/${{ github.event.sha }}/pulls" \
-              --jq '[.[] | select(.state == "open")][0].number // empty')
+              --jq '[.[] | select(.state == "open" and .head.sha == "${{ github.event.sha }}")][0].number // empty')
           fi
           if [ -z "$PR_NUMBER" ]; then
             echo "No hay un PR abierto asociado a este evento -- nada que hacer."
@@ -116,6 +123,19 @@ jobs:
 
   respond:
     needs: resolve-pr
+    # Concurrencia propia (ademas de la del workflow, arriba): la de
+    # arriba agrupa por PR o por SHA segun el evento, asi que un
+    # "issue_comment" (grupo por PR) y un "status" (grupo por SHA) del
+    # mismo PR pueden caer en grupos distintos y correr "respond" en
+    # paralelo -- comentarios duplicados y una carrera real en el "git
+    # push". Ahora que "resolve-pr" ya devuelve el pr_number resuelto
+    # (para status, incluye), se puede agrupar SIEMPRE por PR real aca, y
+    # cancel-in-progress:true hace que el evento "status" (que ya sabe que
+    # CodeRabbit termino) cancele una corrida vieja que todavia estaba
+    # esperando. Hallazgo real de CodeRabbit en este mismo PR.
+    concurrency:
+      group: ai-review-respond-${{ needs.resolve-pr.outputs.pr_number }}
+      cancel-in-progress: true
     # Ojo: un "if" propio en un job con "needs" reemplaza el chequeo
     # implicito de que el job anterior haya tenido exito -- hay que
     # verificarlo a mano con needs.resolve-pr.result.
