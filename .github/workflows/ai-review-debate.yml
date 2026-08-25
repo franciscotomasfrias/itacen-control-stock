@@ -156,22 +156,17 @@ jobs:
       # primer intercambio) antes de que CodeRabbit haya dicho nada real.
       # Hallazgo real de Francisco probando el cambio de identidad de App.
       #
-      # Exigimos TOTAL>0 (no solo PROCESANDO==0): en un disparo muy
-      # temprano (ej. workflow_dispatch inmediatamente despues de un push)
-      # CodeRabbit puede no haber posteado nada todavia -- "0 procesando"
-      # ahi significaria "no arranco", no "ya termino", y seguir de largo
-      # seria el mismo bug que estamos arreglando. Hallazgo real del
-      # segundo revisor sobre este mismo PR.
-      #
-      # --paginate + --jq en gh api aplica el jq pagina por pagina, no al
-      # array combinado -- con mas de una pagina de comentarios el conteo
-      # podia salir partido en varias lineas y romper la comparacion con
-      # "0". "gh api --paginate --slurp" tampoco sirve: gh no permite
-      # combinar --slurp con --jq en la misma llamada (lo probamos en
-      # este mismo PR: el paso quedo 8 minutos tirando el error de uso y
-      # nunca avanzo). Fix real: gh emite el JSON crudo (sin --jq) de
-      # cada pagina como documentos separados, y jq -s (slurp de jq, no
-      # de gh) los combina en un solo array antes de filtrar. Hallazgo
+      # Version anterior (buscar el texto del placeholder en los
+      # comentarios) tenia un hueco real: si CodeRabbit habia comentado en
+      # un push VIEJO y todavia no arranco a mirar el push actual, ese
+      # comentario viejo (ya sin "processing") hacia que este paso
+      # concluyera "termino" sin que CodeRabbit haya dicho nada del commit
+      # de verdad. Fix: usar el check "CodeRabbit" del status rollup de
+      # la PR en vez de texto de comentarios -- ese check SIEMPRE esta
+      # atado al commit HEAD actual (lo confirmamos en este mismo PR: el
+      # rollup paso de PENDING a SUCCESS solo, sin tocar nada, a medida
+      # que CodeRabbit iba terminando cada push). Elimina el problema de
+      # correlacion con el commit de raiz en vez de parchearlo. Hallazgo
       # real del segundo revisor sobre este mismo PR.
       - name: Esperar a que CodeRabbit termine de procesar
         timeout-minutes: 8
@@ -183,13 +178,13 @@ jobs:
           set -euo pipefail
           MAX_INTENTOS=32  # 32 * 15s = 8 minutos
           for intento in $(seq 1 "$MAX_INTENTOS"); do
-            read -r TOTAL PROCESANDO <<< "$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate | jq -s -r \
-              '[.[][] | select(.user.login == "coderabbitai[bot]")] as $c | "\($c | length) \($c | map(select(.body | contains("Currently processing new changes in this PR"))) | length)"')"
-            if [ "$TOTAL" != "0" ] && [ "$PROCESANDO" = "0" ]; then
-              echo "CodeRabbit ya comento ($TOTAL comentario/s) y no esta procesando. Sigo."
+            ESTADO=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json statusCheckRollup \
+              --jq '[.statusCheckRollup[] | select(.context == "CodeRabbit")][0].state // .conclusion // "NONE"')
+            if [ "$ESTADO" != "PENDING" ] && [ "$ESTADO" != "NONE" ]; then
+              echo "Check de CodeRabbit para el commit actual: $ESTADO. Sigo."
               exit 0
             fi
-            echo "Intento $intento/$MAX_INTENTOS: CodeRabbit todavia no comento o sigue procesando (total=$TOTAL, procesando=$PROCESANDO), espero 15s..."
+            echo "Intento $intento/$MAX_INTENTOS: check de CodeRabbit = $ESTADO, espero 15s..."
             sleep 15
           done
           echo "CodeRabbit sigue sin terminar despues de 8 minutos -- corto para no reaccionar con datos incompletos." >&2
