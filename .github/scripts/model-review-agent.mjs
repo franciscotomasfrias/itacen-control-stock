@@ -251,11 +251,20 @@ async function toolWriteFile({ path: userPath, content } = {}) {
 }
 
 async function toolRunBuild() {
+  // "npm run build" ejecuta codigo del propio repo (scripts de package.json,
+  // config de vite, dependencias) -- en un PR del mismo repo (no fork) ese
+  // codigo puede venir modificado por el PR que estamos revisando. Sacamos
+  // los secrets del entorno heredado para que ese build no pueda leerlos
+  // (GH_TOKEN tiene permiso de escritura sobre este repo).
+  const envSinSecrets = { ...process.env };
+  delete envSinSecrets.GH_TOKEN;
+  delete envSinSecrets.OPENROUTER_API_KEY;
   try {
     const { stdout, stderr } = await execFileP('npm', ['run', 'build'], {
       cwd: REPO_ROOT,
       timeout: 180_000,
       maxBuffer: 10 * 1024 * 1024,
+      env: envSinSecrets,
     });
     return { ok: true, exitCode: 0, stdout: stdout.slice(-20_000), stderr: stderr.slice(-20_000) };
   } catch (err) {
