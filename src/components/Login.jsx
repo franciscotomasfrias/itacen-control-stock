@@ -65,7 +65,7 @@ export default function Login() {
             type="button"
             onClick={() => setMostrarPassword((v) => !v)}
             aria-label={mostrarPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-xs"
+            className="absolute right-2 top-1/2 -translate-y-1/2 min-h-11 min-w-11 text-xs"
             style={{ color: '#8B8F98' }}
           >
             {mostrarPassword ? 'Ocultar' : 'Mostrar'}
