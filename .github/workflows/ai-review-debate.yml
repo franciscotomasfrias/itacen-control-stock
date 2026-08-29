@@ -213,7 +213,7 @@ jobs:
           client-id: ${{ secrets.AI_REVIEWER_APP_CLIENT_ID }}
           private-key: ${{ secrets.AI_REVIEWER_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: itacen-control-stock
+          repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
