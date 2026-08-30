@@ -280,6 +280,7 @@ jobs:
       # comentarios nuevos (no ediciones) para que CodeRabbit efectivamente
       # reaccione de nuevo -- una edición no dispara su bot.
       - name: Segundo revisor (OpenRouter)
+        id: review-agent
         # Tope de duración/costo: el script ya corta solo a los 40
         # tool-calls (ver MAX_ITERATIONS en model-review-agent.mjs), pero
         # esto es una red de seguridad extra a nivel del step -- sin esto,
@@ -315,8 +316,19 @@ jobs:
       # la falla (serian mas pasos condicionales por cada step posible) --
       # con el link al log alcanza para diagnosticar, y el pedido explicito
       # de Francisco fue "sin importar la causa".
+      #
+      # steps.review-agent.outcome != 'success' (no solo "failure()" a
+      # secas): "failure()" tambien es true si el paso de ARRIBA
+      # ("Notificar a Slack si corresponde", que corre con "if: always()")
+      # falla por su cuenta -- ahi el segundo revisor pudo haber terminado
+      # bien, y este mensaje diria "fallo tecnico del segundo revisor" de
+      # forma enganosa. Chequear el outcome puntual del paso del modelo
+      # (falla, o ni siquiera llego a correr) es lo que realmente distingue
+      # "el segundo revisor no pudo terminar" de "solo fallo el aviso".
+      # Hallazgo real de CodeRabbit + el segundo revisor sobre este mismo
+      # cambio.
       - name: Avisar a Slack si el segundo revisor falló técnicamente
-        if: failure()
+        if: failure() && steps.review-agent.outcome != 'success'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           REPO: ${{ github.repository }}
