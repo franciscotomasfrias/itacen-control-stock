@@ -303,3 +303,26 @@ jobs:
             bash .github/scripts/notify-slack.sh "$(cat /tmp/slack-notify.txt)"
             rm -f /tmp/slack-notify.txt
           fi
+
+      # Si algún paso anterior de este job falló (npm ci, generación del
+      # token de la App, timeout esperando a CodeRabbit, el script del
+      # modelo, lo que sea), el paso "Segundo revisor" nunca llega a
+      # correr -- nunca escribe /tmp/slack-notify.txt, y el paso de arriba
+      # ("if: always()") no encuentra nada que mandar. Sin este paso, una
+      # falla tecnica del segundo revisor queda muda: nadie se entera salvo
+      # que alguien entre a mirar Actions a mano (paso exactamente lo que
+      # encontro Francisco en el PR #10). No distingue el motivo exacto de
+      # la falla (serian mas pasos condicionales por cada step posible) --
+      # con el link al log alcanza para diagnosticar, y el pedido explicito
+      # de Francisco fue "sin importar la causa".
+      - name: Avisar a Slack si el segundo revisor falló técnicamente
+        if: failure()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.resolve-pr.outputs.pr_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          MSG=$(printf 'PR #%s — NECESITA TU DECISION\nhttps://github.com/%s/pull/%s\n\n⚠️ El segundo revisor no pudo terminar (fallo técnico, no un desacuerdo de debate) — ESCALADO\n   Motivo: el job se cortó antes de terminar -- ver el log para el detalle exacto\n   Log: %s' "$PR_NUMBER" "$REPO" "$PR_NUMBER" "$RUN_URL")
+          bash .github/scripts/notify-slack.sh "$MSG"
