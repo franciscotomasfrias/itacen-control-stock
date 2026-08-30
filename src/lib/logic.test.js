@@ -61,31 +61,44 @@ function sumaReparto(reparto, tipo) {
 }
 
 describe('calcularPlanDelDia -- reparto siempre en enteros (FR-001, FR-002, FR-003)', () => {
-  // Ruptura que detecta: si se reemplaza Math.round(porcion) por
-  // Math.floor(porcion) en el calculo de `asignado`, plan.auto pasa de 17
-  // a 16 (16.667 redondea a 17, pero ese valor no queda recortado por gap
-  // ni por restante, asi que el cambio es observable). Tambien detecta
-  // cualquier ruptura en la suma reparto === plan por tipo.
-  it('redondea el gap fraccionario a enteros y el reparto entre operarios suma exactamente el plan (con comodin activo)', () => {
-    // gaps: moto 50, auto 25, camion 15 -> totalGap 90 > capacidadBase(50)
-    // -> comodin activo -> 6 presentes * 10 cajas/persona = capacidadHoy 60.
-    // porcion moto = 60*50/90 = 33.333... -> round 33 (no clippeado)
-    // porcion auto = 60*25/90 = 16.666... -> round 17 (no clippeado)
-    // porcion camion = 60*15/90 = 10 exacto -> 10
-    const resultado = calcularPlanDelDia({
+  // Setup compartido por las 4 aserciones de abajo (2 escenarios x 2
+  // invariantes cada uno) -- se recalcula en cada it() en vez de usar
+  // beforeEach para que los tests queden independientes entre si, sin
+  // estado compartido mutable.
+
+  // gaps: moto 50, auto 25, camion 15 -> totalGap 90 > capacidadBase(50)
+  // -> comodin activo -> 6 presentes * 10 cajas/persona = capacidadHoy 60.
+  // porcion moto = 60*50/90 = 33.333... -> round 33 (no clippeado)
+  // porcion auto = 60*25/90 = 16.666... -> round 17 (no clippeado)
+  // porcion camion = 60*15/90 = 10 exacto -> 10
+  function escenarioComComodin() {
+    return calcularPlanDelDia({
       fecha: FECHA,
       cargasPorFecha: {},
       bufferObjetivo: { moto: 50, auto: 25, camion: 15 },
       config: CONFIG_CAP_10,
       ausenciasPorFecha: {},
     });
+  }
+
+  // Ruptura que detecta: si se reemplaza Math.round(porcion) por
+  // Math.floor(porcion) en el calculo de `asignado`, plan.auto pasa de 17
+  // a 16 (16.667 redondea a 17, pero ese valor no queda recortado por gap
+  // ni por restante, asi que el cambio es observable).
+  it('con comodin activo, el gap fraccionario se redondea a un plan entero', () => {
+    const resultado = escenarioComComodin();
 
     expect(resultado.plan).toEqual({ moto: 33, auto: 17, camion: 10 });
     TIPOS.forEach((t) => {
       expect(Number.isInteger(resultado.plan[t])).toBe(true);
     });
+  });
 
-    // FR-002 / FR-003: nada se pierde ni se inventa al repartir entre operarios.
+  // Ruptura que detecta: cualquier ruptura en la suma reparto === plan
+  // por tipo (nada se pierde ni se inventa al repartir entre operarios).
+  it('con comodin activo, el reparto entre operarios suma exactamente el plan', () => {
+    const resultado = escenarioComComodin();
+
     TIPOS.forEach((t) => {
       expect(sumaReparto(resultado.reparto, t)).toBe(resultado.plan[t]);
       Object.values(resultado.reparto).forEach((r) => {
@@ -95,30 +108,41 @@ describe('calcularPlanDelDia -- reparto siempre en enteros (FR-001, FR-002, FR-0
     });
   });
 
-  // Ruptura que detecta: si Math.round(porcion) se reemplaza por
-  // Math.floor(porcion), plan.moto y plan.auto pasan de 17 a 16 (no estan
-  // recortados por `restante`, que en ese punto es 50 y 33
-  // respectivamente). Tambien detecta si el Math.min(..., restante) se
-  // rompe y la suma supera la capacidad disponible.
-  it('cuando la capacidad no alcanza a cubrir el gap total, el plan sigue siendo entero y no supera la capacidad del dia', () => {
-    // gaps: moto 100, auto 100, camion 100 -> totalGap 300, comodin
-    // ausente -> 5 presentes * 10 = capacidadHoy 50.
-    // porcion cada tipo = 50*100/300 = 16.666... -> round 17
-    // moto: min(17,100,restante50)=17, restante 33
-    // auto: min(17,100,restante33)=17, restante 16
-    // camion: min(17,100,restante16)=16 (clippeado por restante)
-    const resultado = calcularPlanDelDia({
+  // gaps: moto 100, auto 100, camion 100 -> totalGap 300, comodin
+  // ausente -> 5 presentes * 10 = capacidadHoy 50.
+  // porcion cada tipo = 50*100/300 = 16.666... -> round 17
+  // moto: min(17,100,restante50)=17, restante 33
+  // auto: min(17,100,restante33)=17, restante 16
+  // camion: min(17,100,restante16)=16 (clippeado por restante)
+  function escenarioCapacidadInsuficiente() {
+    return calcularPlanDelDia({
       fecha: FECHA,
       cargasPorFecha: {},
       bufferObjetivo: { moto: 100, auto: 100, camion: 100 },
       config: CONFIG_CAP_10,
       ausenciasPorFecha: { [FECHA_KEY]: ['Miguel'] },
     });
+  }
+
+  // Ruptura que detecta: si Math.round(porcion) se reemplaza por
+  // Math.floor(porcion), plan.moto y plan.auto pasan de 17 a 16 (no estan
+  // recortados por `restante`, que en ese punto es 50 y 33
+  // respectivamente). Tambien detecta si el Math.min(..., restante) se
+  // rompe y la suma supera la capacidad disponible.
+  it('cuando la capacidad no alcanza a cubrir el gap total, el plan sigue siendo entero y no supera la capacidad del dia', () => {
+    const resultado = escenarioCapacidadInsuficiente();
 
     expect(resultado.plan).toEqual({ moto: 17, auto: 17, camion: 16 });
     const capacidadHoy = 50;
     const sumaPlan = TIPOS.reduce((s, t) => s + resultado.plan[t], 0);
     expect(sumaPlan).toBeLessThanOrEqual(capacidadHoy);
+  });
+
+  // Ruptura que detecta: cualquier ruptura en la suma reparto === plan
+  // por tipo bajo este mismo escenario de capacidad insuficiente.
+  it('cuando la capacidad no alcanza a cubrir el gap total, el reparto entre operarios sigue sumando exacto el plan', () => {
+    const resultado = escenarioCapacidadInsuficiente();
+
     TIPOS.forEach((t) => {
       expect(sumaReparto(resultado.reparto, t)).toBe(resultado.plan[t]);
     });
