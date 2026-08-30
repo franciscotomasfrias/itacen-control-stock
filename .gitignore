@@ -4,3 +4,8 @@ dist
 .env*
 .DS_Store
 .vercel
+
+# SDD/TDD (spec-kit) — prototipo, todavía no se commitea (ver my_claude/itacen/CLAUDE.md)
+.specify/
+specs/
+.claude/skills/speckit-*/
